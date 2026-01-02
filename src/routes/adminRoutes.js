@@ -19,7 +19,6 @@ import {
   createAdmin,
   getFinanceOverview,
   getUserAverages,
-  getUserTransactionDetails,
 } from '../controllers/adminController.js';
 import { protect, admin } from '../middleware/auth.js';
 
@@ -65,6 +64,5 @@ router.post('/admins', protect, admin, createAdmin);
 // Finance
 router.get('/finance/overview', protect, admin, getFinanceOverview);
 router.get('/finance/user-averages', protect, admin, getUserAverages);
-router.get('/finance/user-transactions',  getUserTransactionDetails);
 
 export default router;
