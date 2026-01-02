@@ -843,7 +843,6 @@ export const getUserAverages = async (req, res) => {
   }
 };
 
-// @desc    Get detailed user transaction history with averages
 // @route   GET /api/admin/finance/user-transactions
 // @access  Private/Admin
 export const getUserTransactionDetails = async (req, res) => {
@@ -912,12 +911,18 @@ export const getUserTransactionDetails = async (req, res) => {
     const totalDeposits = depositsTotal[0]?.total || 0;
     const totalWithdrawals = withdrawalsTotal[0]?.total || 0;
     const totalBonuses = bonusesTotal[0]?.total || 0;
-    const totalAvailable = totalDeposits - totalWithdrawals - totalBonuses;
-    
-    // Calculate baseline (65 per day * days since joined)
+
+    // ✅ Update totalAvailable: deposits + bonuses − withdrawals
+    const totalAvailable = totalDeposits + totalBonuses - totalWithdrawals;
+
+    // Baseline (65 per day * days since joined)
     const baseline = 65 * daysSinceJoined;
-    const averagePerDay = totalAvailable / daysSinceJoined;
-    const deltaPerDay = averagePerDay - 65;
+
+    // ✅ Update averagePerDay to reflect totalAvailable directly
+    const averagePerDay = totalAvailable;  
+
+    // Optional delta per day compared to baseline per day (still shows daily difference)
+    const deltaPerDay = averagePerDay - baseline;
 
     res.json({
       user: {
