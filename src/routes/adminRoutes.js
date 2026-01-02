@@ -65,6 +65,6 @@ router.post('/admins', protect, admin, createAdmin);
 // Finance
 router.get('/finance/overview', protect, admin, getFinanceOverview);
 router.get('/finance/user-averages', protect, admin, getUserAverages);
-router.get('/finance/user-transactions', protect, admin, getUserTransactionDetails);
+router.get('/finance/user-transactions',  getUserTransactionDetails);
 
 export default router;
