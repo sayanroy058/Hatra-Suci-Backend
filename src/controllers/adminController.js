@@ -793,7 +793,7 @@ export const getUserAverages = async (req, res) => {
         let txActiveDays = Math.min(activeDays, Math.ceil((periodEnd - txDate) / (1000 * 60 * 60 * 24)));
         if (txActiveDays <= 0) return; // ignore transactions outside active period
 
-        if (tx.type === 'deposit' || ['bonus', 'daily_reward', 'level_reward', 'referral'].includes(tx.type)) {
+        if (tx.type === 'deposit') {
           weightedTotal += tx.amount * txActiveDays;
         } else if (tx.type === 'withdrawal') {
           weightedTotal -= tx.amount * txActiveDays;
