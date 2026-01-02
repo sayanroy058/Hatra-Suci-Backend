@@ -848,14 +848,22 @@ export const getUserAverages = async (req, res) => {
 // @access  Private/Admin
 export const getUserTransactionDetails = async (req, res) => {
   try {
-    const userId = req.query.userId;
+    // Sanitize and validate userId: allow inputs like "<id>", '"id"', or raw id
+    const rawUserId = String(req.query.userId || '').trim();
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
 
-    if (!userId) {
+    if (!rawUserId) {
       return res.status(400).json({ message: 'userId is required' });
     }
+
+    // Extract a 24-hex ObjectId if present (this strips surrounding <> or quotes)
+    const idMatch = rawUserId.match(/([a-fA-F0-9]{24})/);
+    if (!idMatch) {
+      return res.status(400).json({ message: 'Invalid userId format' });
+    }
+    const userId = idMatch[1];
 
     // Get user details
     const user = await User.findById(userId).select('_id username email createdAt').lean();
