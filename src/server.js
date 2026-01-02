@@ -55,9 +55,28 @@ const corsOptions = {
     
     if (allowedPatterns.some(pattern => pattern.test(origin))) {
       callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
     }
+
+    // Allow origins explicitly configured via ALLOWED_ORIGINS env var (comma-separated)
+    const allowedFromEnv = (process.env.ALLOWED_ORIGINS || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (allowedFromEnv.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Allow common hosting platform preview domains (e.g., Vercel, Netlify)
+    try {
+      if (origin.includes('.vercel.app') || origin.includes('.netlify.app')) {
+        return callback(null, true);
+      }
+    } catch (e) {
+      // ignore and fall through to rejection
+    }
+
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   optionsSuccessStatus: 200
