@@ -811,8 +811,6 @@ export const getUserAverages = async (req, res) => {
         .filter(t => ['bonus', 'daily_reward', 'level_reward', 'referral'].includes(t.type))
         .reduce((sum, t) => sum + t.amount, 0);
 
-      const availableLast30 = depositsLast30 - withdrawalsLast30 - bonusesLast30;
-
       return {
         userId: user._id,
         username: user.username,
@@ -820,7 +818,6 @@ export const getUserAverages = async (req, res) => {
         depositsLast30,
         withdrawalsLast30,
         bonusesLast30,
-        availableLast30: parseFloat(availableLast30.toFixed(2)),
         weightedTotal: parseFloat(weightedTotal.toFixed(2)),
         averagePerDay: parseFloat(averagePerDay.toFixed(2)),
         deltaPerDay: parseFloat(deltaPerDay.toFixed(2))
