@@ -737,7 +737,7 @@ export const getFinanceOverview = async (req, res) => {
 // @access  Private/Admin
 export const getUserAverages = async (req, res) => {
   try {
-    const days = parseInt(req.query.days) || 30;
+    const days = parseInt(req.query.days) || 30; // default period
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
@@ -756,13 +756,13 @@ export const getUserAverages = async (req, res) => {
       User.countDocuments({})
     ]);
 
-    // Helper to get all relevant transactions for users in the period
+    // Fetch transactions for these users
     const transactionsData = await Transaction.aggregate([
       { 
         $match: { 
           type: { $in: ['deposit', 'withdrawal', 'bonus', 'daily_reward', 'level_reward', 'referral'] },
           status: 'completed',
-          createdAt: { $gte: periodStart }
+          createdAt: { $lte: periodEnd } // include all transactions before period end
         } 
       },
       { 
@@ -773,7 +773,6 @@ export const getUserAverages = async (req, res) => {
       }
     ]);
 
-    // Map transactions per user for easy lookup
     const transactionsMap = new Map(transactionsData.map(d => [d._id.toString(), d.transactions]));
 
     const baseline = 65 * days;
@@ -781,33 +780,37 @@ export const getUserAverages = async (req, res) => {
       const userId = user._id.toString();
       const userTransactions = transactionsMap.get(userId) || [];
 
+      // Calculate user's active days (joined vs period)
+      const userCreatedDate = new Date(user.createdAt);
+      const activeDays = Math.min(days, Math.ceil((periodEnd - userCreatedDate) / (1000 * 60 * 60 * 24)) || 1);
+
       let weightedTotal = 0;
 
       userTransactions.forEach(tx => {
         const txDate = new Date(tx.createdAt);
-        // Number of days the transaction is "active" in the period
-        const activeDays = Math.max(0, Math.ceil((periodEnd - txDate) / (1000 * 60 * 60 * 24)));
-        if (activeDays > days) return; // Ignore transactions before period start
-        const daysCount = Math.min(activeDays, days);
+
+        // Transaction contributes only if it is within activeDays
+        let txActiveDays = Math.min(activeDays, Math.ceil((periodEnd - txDate) / (1000 * 60 * 60 * 24)));
+        if (txActiveDays <= 0) return; // ignore transactions outside active period
 
         if (tx.type === 'deposit' || ['bonus', 'daily_reward', 'level_reward', 'referral'].includes(tx.type)) {
-          weightedTotal += tx.amount * daysCount;
+          weightedTotal += tx.amount * txActiveDays;
         } else if (tx.type === 'withdrawal') {
-          weightedTotal -= tx.amount * daysCount;
+          weightedTotal -= tx.amount * txActiveDays;
         }
       });
 
-      const averagePerDay = weightedTotal / days;
+      const averagePerDay = weightedTotal / activeDays;
       const deltaPerDay = averagePerDay - 65;
 
-      // Sum deposits, withdrawals, bonuses separately
-      const depositsLast30 = userTransactions
+      // Calculate total deposits, withdrawals, bonuses
+      const depositsLastPeriod = userTransactions
         .filter(t => t.type === 'deposit')
         .reduce((sum, t) => sum + t.amount, 0);
-      const withdrawalsLast30 = userTransactions
+      const withdrawalsLastPeriod = userTransactions
         .filter(t => t.type === 'withdrawal')
         .reduce((sum, t) => sum + t.amount, 0);
-      const bonusesLast30 = userTransactions
+      const bonusesLastPeriod = userTransactions
         .filter(t => ['bonus', 'daily_reward', 'level_reward', 'referral'].includes(t.type))
         .reduce((sum, t) => sum + t.amount, 0);
 
@@ -815,9 +818,10 @@ export const getUserAverages = async (req, res) => {
         userId: user._id,
         username: user.username,
         email: user.email,
-        depositsLast30,
-        withdrawalsLast30,
-        bonusesLast30,
+        daysConsidered: activeDays,          // number of days considered in calculation
+        depositsLastPeriod,
+        withdrawalsLastPeriod,
+        bonusesLastPeriod,
         weightedTotal: parseFloat(weightedTotal.toFixed(2)),
         averagePerDay: parseFloat(averagePerDay.toFixed(2)),
         deltaPerDay: parseFloat(deltaPerDay.toFixed(2))
@@ -835,6 +839,7 @@ export const getUserAverages = async (req, res) => {
         pages: Math.ceil(totalUsers / limit)
       }
     });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
