@@ -732,7 +732,7 @@ export const getFinanceOverview = async (req, res) => {
   }
 };
 
-// @desc    Get per-user 30-day averages
+// @desc    Get per-user weighted averages over a period
 // @route   GET /api/admin/finance/user-averages
 // @access  Private/Admin
 export const getUserAverages = async (req, res) => {
@@ -741,80 +741,75 @@ export const getUserAverages = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - days);
 
-    // Get paginated users with their data
+    const periodEnd = new Date();
+    const periodStart = new Date();
+    periodStart.setDate(periodEnd.getDate() - days);
+
+    // Get paginated users
     const [users, totalUsers] = await Promise.all([
       User.find({})
-        .select('_id username email')
+        .select('_id username email createdAt')
         .skip(skip)
         .limit(limit)
         .lean(),
       User.countDocuments({})
     ]);
 
-    // Get deposits, withdrawals, and bonuses for all users in the last 30 days
-    const [depositsData, withdrawalsData, bonusesData] = await Promise.all([
-      Deposit.aggregate([
-        { 
-          $match: { 
-            status: 'approved',
-            createdAt: { $gte: thirtyDaysAgo }
-          } 
-        },
-        { 
-          $group: { 
-            _id: '$user', 
-            total: { $sum: '$amount' } 
-          } 
+    // Helper to get all relevant transactions for users in the period
+    const transactionsData = await Transaction.aggregate([
+      { 
+        $match: { 
+          type: { $in: ['deposit', 'withdrawal', 'bonus', 'daily_reward', 'level_reward', 'referral'] },
+          status: 'completed',
+          createdAt: { $gte: periodStart }
+        } 
+      },
+      { 
+        $group: {
+          _id: '$user',
+          transactions: { $push: '$$ROOT' }
         }
-      ]),
-      Withdrawal.aggregate([
-        { 
-          $match: { 
-            status: 'approved',
-            createdAt: { $gte: thirtyDaysAgo }
-          } 
-        },
-        { 
-          $group: { 
-            _id: '$user', 
-            total: { $sum: '$amount' } 
-          } 
-        }
-      ]),
-      Transaction.aggregate([
-        { 
-          $match: { 
-            type: { $in: ['bonus', 'daily_reward', 'level_reward', 'referral'] },
-            status: 'completed',
-            createdAt: { $gte: thirtyDaysAgo }
-          } 
-        },
-        { 
-          $group: { 
-            _id: '$user', 
-            total: { $sum: '$amount' } 
-          } 
-        }
-      ])
+      }
     ]);
 
-    // Create lookup maps for quick access
-    const depositsMap = new Map(depositsData.map(d => [d._id.toString(), d.total]));
-    const withdrawalsMap = new Map(withdrawalsData.map(w => [w._id.toString(), w.total]));
-    const bonusesMap = new Map(bonusesData.map(b => [b._id.toString(), b.total]));
+    // Map transactions per user for easy lookup
+    const transactionsMap = new Map(transactionsData.map(d => [d._id.toString(), d.transactions]));
 
-    // Calculate per-user metrics
     const baseline = 65 * days;
     const userAverages = users.map(user => {
       const userId = user._id.toString();
-      const depositsLast30 = depositsMap.get(userId) || 0;
-      const withdrawalsLast30 = withdrawalsMap.get(userId) || 0;
-      const bonusesLast30 = bonusesMap.get(userId) || 0;
-      const availableLast30 = depositsLast30 - withdrawalsLast30 - bonusesLast30;
-      const deltaPerDay = (availableLast30 - baseline) / days;
+      const userTransactions = transactionsMap.get(userId) || [];
+
+      let weightedTotal = 0;
+
+      userTransactions.forEach(tx => {
+        const txDate = new Date(tx.createdAt);
+        // Number of days the transaction is "active" in the period
+        const activeDays = Math.max(0, Math.ceil((periodEnd - txDate) / (1000 * 60 * 60 * 24)));
+        if (activeDays > days) return; // Ignore transactions before period start
+        const daysCount = Math.min(activeDays, days);
+
+        if (tx.type === 'deposit' || ['bonus', 'daily_reward', 'level_reward', 'referral'].includes(tx.type)) {
+          weightedTotal += tx.amount * daysCount;
+        } else if (tx.type === 'withdrawal') {
+          weightedTotal -= tx.amount * daysCount;
+        }
+      });
+
+      const averagePerDay = weightedTotal / days;
+      const deltaPerDay = averagePerDay - 65;
+
+      // Sum deposits, withdrawals, bonuses separately
+      const depositsLast30 = userTransactions
+        .filter(t => t.type === 'deposit')
+        .reduce((sum, t) => sum + t.amount, 0);
+      const withdrawalsLast30 = userTransactions
+        .filter(t => t.type === 'withdrawal')
+        .reduce((sum, t) => sum + t.amount, 0);
+      const bonusesLast30 = userTransactions
+        .filter(t => ['bonus', 'daily_reward', 'level_reward', 'referral'].includes(t.type))
+        .reduce((sum, t) => sum + t.amount, 0);
 
       return {
         userId: user._id,
@@ -823,13 +818,15 @@ export const getUserAverages = async (req, res) => {
         depositsLast30,
         withdrawalsLast30,
         bonusesLast30,
-        availableLast30,
-        deltaPerDay
+        weightedTotal: parseFloat(weightedTotal.toFixed(2)),
+        averagePerDay: parseFloat(averagePerDay.toFixed(2)),
+        deltaPerDay: parseFloat(deltaPerDay.toFixed(2))
       };
     });
 
     res.json({
       days,
+      baseline,
       users: userAverages,
       pagination: {
         total: totalUsers,
@@ -842,6 +839,7 @@ export const getUserAverages = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 // @route   GET /api/admin/finance/user-transactions
 // @access  Private/Admin
@@ -912,8 +910,8 @@ export const getUserTransactionDetails = async (req, res) => {
     const totalWithdrawals = withdrawalsTotal[0]?.total || 0;
     const totalBonuses = bonusesTotal[0]?.total || 0;
 
-    // ✅ Update totalAvailable: deposits + bonuses − withdrawals
-    const totalAvailable = totalDeposits + totalBonuses - totalWithdrawals;
+    // ✅ Update totalAvailable: deposits − withdrawals
+    const totalAvailable = totalDeposits - totalWithdrawals;
 
     // Baseline (65 per day * days since joined)
     const baseline = 65 * daysSinceJoined;
