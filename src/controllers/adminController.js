@@ -813,8 +813,8 @@ export const getUserAverages = async (req, res) => {
       const depositsLast30 = depositsMap.get(userId) || 0;
       const withdrawalsLast30 = withdrawalsMap.get(userId) || 0;
       const bonusesLast30 = bonusesMap.get(userId) || 0;
-      const availableLast30 = depositsLast30 - withdrawalsLast30 + bonusesLast30;
-      const deltaPerDay = (baseline - availableLast30) / days;
+      const availableLast30 = depositsLast30 - withdrawalsLast30 - bonusesLast30;
+      const deltaPerDay = (availableLast30 - baseline) / days;
 
       return {
         userId: user._id,
@@ -836,6 +836,106 @@ export const getUserAverages = async (req, res) => {
         page,
         limit,
         pages: Math.ceil(totalUsers / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get detailed user transaction history with averages
+// @route   GET /api/admin/finance/user-transactions
+// @access  Private/Admin
+export const getUserTransactionDetails = async (req, res) => {
+  try {
+    const userId = req.query.userId;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'userId is required' });
+    }
+
+    // Get user details
+    const user = await User.findById(userId).select('_id username email createdAt').lean();
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Calculate days since user joined
+    const userCreatedDate = new Date(user.createdAt);
+    const currentDate = new Date();
+    const daysSinceJoined = Math.max(1, Math.ceil((currentDate - userCreatedDate) / (1000 * 60 * 60 * 24)));
+
+    // Get all transactions for this user with pagination
+    const [transactions, totalTransactions] = await Promise.all([
+      Transaction.find({ user: userId })
+        .populate('user', 'username email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Transaction.countDocuments({ user: userId })
+    ]);
+
+    // Calculate totals for the period since user joined
+    const [depositsTotal, withdrawalsTotal, bonusesTotal] = await Promise.all([
+      Deposit.aggregate([
+        { $match: { user: user._id, status: 'approved' } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]),
+      Withdrawal.aggregate([
+        { $match: { user: user._id, status: 'approved' } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]),
+      Transaction.aggregate([
+        { 
+          $match: { 
+            user: user._id,
+            type: { $in: ['bonus', 'daily_reward', 'level_reward', 'referral'] },
+            status: 'completed'
+          } 
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ])
+    ]);
+
+    const totalDeposits = depositsTotal[0]?.total || 0;
+    const totalWithdrawals = withdrawalsTotal[0]?.total || 0;
+    const totalBonuses = bonusesTotal[0]?.total || 0;
+    const totalAvailable = totalDeposits - totalWithdrawals - totalBonuses;
+    
+    // Calculate baseline (65 per day * days since joined)
+    const baseline = 65 * daysSinceJoined;
+    const averagePerDay = totalAvailable / daysSinceJoined;
+    const deltaPerDay = averagePerDay - 65;
+
+    res.json({
+      user: {
+        userId: user._id,
+        username: user.username,
+        email: user.email,
+        joinedDate: user.createdAt,
+        daysSinceJoined
+      },
+      summary: {
+        totalDeposits,
+        totalWithdrawals,
+        totalBonuses,
+        totalAvailable,
+        baseline,
+        averagePerDay: parseFloat(averagePerDay.toFixed(2)),
+        deltaPerDay: parseFloat(deltaPerDay.toFixed(2))
+      },
+      transactions: {
+        data: transactions,
+        pagination: {
+          total: totalTransactions,
+          page,
+          limit,
+          pages: Math.ceil(totalTransactions / limit)
+        }
       }
     });
   } catch (error) {
