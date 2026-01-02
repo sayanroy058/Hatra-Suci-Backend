@@ -801,7 +801,7 @@ export const getUserAverages = async (req, res) => {
       });
 
       const averagePerDay = weightedTotal / activeDays;
-      const deltaPerDay = averagePerDay - 65;
+      // const deltaPerDay = averagePerDay - 65;
 
       // Calculate total deposits, withdrawals, bonuses
       const depositsLastPeriod = userTransactions
@@ -822,9 +822,9 @@ export const getUserAverages = async (req, res) => {
         depositsLastPeriod,
         withdrawalsLastPeriod,
         bonusesLastPeriod,
-        weightedTotal: parseFloat(weightedTotal.toFixed(2)),
-        averagePerDay: parseFloat(averagePerDay.toFixed(2)),
-        deltaPerDay: parseFloat(deltaPerDay.toFixed(2))
+        // weightedTotal: parseFloat(weightedTotal.toFixed(2)),
+        averagePerDay: parseFloat(averagePerDay.toFixed(2))
+        // deltaPerDay: parseFloat(deltaPerDay.toFixed(2))
       };
     });
 
