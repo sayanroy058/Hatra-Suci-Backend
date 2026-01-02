@@ -814,7 +814,7 @@ export const getUserAverages = async (req, res) => {
       const withdrawalsLast30 = withdrawalsMap.get(userId) || 0;
       const bonusesLast30 = bonusesMap.get(userId) || 0;
       const availableLast30 = depositsLast30 - withdrawalsLast30 + bonusesLast30;
-      const deltaPerDay = (availableLast30 - baseline) / days;
+      const deltaPerDay = (baseline - availableLast30) / days;
 
       return {
         userId: user._id,
