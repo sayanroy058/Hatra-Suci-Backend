@@ -21,8 +21,12 @@ import {
   getUserAverages,
 } from '../controllers/adminController.js';
 import { protect, admin } from '../middleware/auth.js';
+import { adminLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
+
+// Apply rate limiter to all admin routes
+router.use(adminLimiter);
 
 // User management
 router.get('/users', protect, admin, getAllUsers);

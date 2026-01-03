@@ -1,24 +1,38 @@
 import mongoose from 'mongoose';
 
+// Singleton connection cache for serverless
+let cachedConnection = null;
+
 const connectDB = async () => {
+  // Reuse existing connection if available
+  if (cachedConnection && mongoose.connection.readyState === 1) {
+    console.log('Using cached MongoDB connection');
+    return cachedConnection;
+  }
+
   try {
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      // Connection pool settings for high concurrency
-      maxPoolSize: 100, // Maximum 100 connections in pool
-      minPoolSize: 10,  // Minimum 10 connections always available
+      // Optimized pool settings for serverless/free tier
+      maxPoolSize: 5,  // Reduced for serverless and free tier
+      minPoolSize: 0,  // No minimum for serverless cold starts
       socketTimeoutMS: 45000,
       serverSelectionTimeoutMS: 5000,
       
       // Performance optimizations
-      autoIndex: process.env.NODE_ENV === 'development', // Only auto-create indexes in dev
+      autoIndex: process.env.NODE_ENV === 'development',
       maxIdleTimeMS: 10000,
     });
     
+    cachedConnection = conn;
     console.log(`MongoDB Connected: ${conn.connection.host}`);
-    console.log(`Connection pool configured: min=10, max=100`);
+    console.log(`Connection pool configured: min=0, max=5 (serverless optimized)`);
     
-    // Create indexes for better query performance
-    await createIndexes();
+    // Only create indexes if explicitly enabled via env flag
+    if (process.env.CREATE_INDEXES_ON_START === 'true') {
+      await createIndexes();
+    } else {
+      console.log('Skipping index creation (set CREATE_INDEXES_ON_START=true to enable)');
+    }
     
   } catch (error) {
     console.error(`Error: ${error.message}`);

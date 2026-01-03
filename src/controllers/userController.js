@@ -210,11 +210,21 @@ export const getTransactions = async (req, res) => {
 // @access  Private
 export const getReferrals = async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
     const Referral = (await import('../models/Referral.js')).default;
-    const referrals = await Referral.find({ referrer: req.user._id })
-      .populate('referred', 'username email createdAt')
-      .sort({ createdAt: -1 })
-      .lean();
+    
+    const [referrals, total] = await Promise.all([
+      Referral.find({ referrer: req.user._id })
+        .populate('referred', 'username email createdAt')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Referral.countDocuments({ referrer: req.user._id })
+    ]);
 
     // Normalize referrals: assign default 'left' side when absent (legacy data)
     const normalizedReferrals = referrals.map(ref => ({
@@ -222,7 +232,15 @@ export const getReferrals = async (req, res) => {
       side: ref.side || 'left'
     }));
 
-    res.json(normalizedReferrals);
+    res.json({
+      data: normalizedReferrals,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -10,16 +10,17 @@ import {
   checkLevelRewards,
 } from '../controllers/userController.js';
 import { protect, checkMaintenanceMode } from '../middleware/auth.js';
+import { depositLimiter, withdrawalLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
 router.route('/deposits')
   .get(protect, checkMaintenanceMode, getDeposits)
-  .post(protect, checkMaintenanceMode, createDeposit);
+  .post(protect, depositLimiter, checkMaintenanceMode, createDeposit);
 
 router.route('/withdrawals')
   .get(protect, checkMaintenanceMode, getWithdrawals)
-  .post(protect, checkMaintenanceMode, createWithdrawal);
+  .post(protect, withdrawalLimiter, checkMaintenanceMode, createWithdrawal);
 
 router.get('/transactions', protect, checkMaintenanceMode, getTransactions);
 router.get('/referrals', protect, checkMaintenanceMode, getReferrals);
