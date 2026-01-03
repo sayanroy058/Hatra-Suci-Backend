@@ -3,7 +3,7 @@ import { settingsCache } from './cache.js';
 // Helper function to get settings with caching
 export const getSetting = async (Settings, key, defaultValue = null) => {
   // Check cache first
-  const cached = settingsCache.get(key);
+  const cached = await settingsCache.get(key);
   if (cached !== null) {
     return cached;
   }
@@ -13,17 +13,17 @@ export const getSetting = async (Settings, key, defaultValue = null) => {
   const value = setting ? setting.value : defaultValue;
   
   // Store in cache
-  settingsCache.set(key, value);
+  await settingsCache.set(key, value);
   
   return value;
 };
 
 // Helper to invalidate cache when settings are updated
-export const invalidateSettingCache = (key) => {
+export const invalidateSettingCache = async (key) => {
   if (key) {
-    settingsCache.delete(key);
+    await settingsCache.delete(key);
   } else {
-    settingsCache.clear();
+    await settingsCache.clear();
   }
 };
 
@@ -34,7 +34,7 @@ export const getSettings = async (Settings, keys, defaultValues = {}) => {
   
   // Check cache for each key
   for (const key of keys) {
-    const cached = settingsCache.get(key);
+    const cached = await settingsCache.get(key);
     if (cached !== null) {
       results[key] = cached;
     } else {
@@ -48,14 +48,14 @@ export const getSettings = async (Settings, keys, defaultValues = {}) => {
     
     for (const setting of settings) {
       results[setting.key] = setting.value;
-      settingsCache.set(setting.key, setting.value);
+      await settingsCache.set(setting.key, setting.value);
     }
     
     // Add default values for keys not found
     for (const key of keysToFetch) {
       if (results[key] === undefined) {
         results[key] = defaultValues[key] || null;
-        settingsCache.set(key, results[key]);
+        await settingsCache.set(key, results[key]);
       }
     }
   }

@@ -84,7 +84,7 @@ export const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new RedisStore({ prefix: 'auth:' }),
-  keyGenerator: (req) => req.ip, // Rate limit by IP address
+  // Use default IP-based key generation (handles IPv6 automatically)
   handler: (req, res) => {
     res.status(429).json({
       message: 'Too many authentication attempts from this IP, please try again after 15 minutes',
@@ -100,8 +100,9 @@ export const depositLimiter = rateLimit({
   message: 'Too many deposit requests, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => !req.user, // Skip rate limiting if not authenticated
   store: new RedisStore({ prefix: 'deposit:' }),
-  keyGenerator: (req) => req.user?._id?.toString() || req.ip, // Rate limit by user ID, fallback to IP
+  keyGenerator: (req) => req.user?._id?.toString() || 'unauthenticated', // Rate limit by user ID
   handler: (req, res) => {
     res.status(429).json({
       message: 'Too many deposit requests, please try again later',
@@ -117,8 +118,9 @@ export const withdrawalLimiter = rateLimit({
   message: 'Too many withdrawal requests, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => !req.user, // Skip rate limiting if not authenticated
   store: new RedisStore({ prefix: 'withdrawal:' }),
-  keyGenerator: (req) => req.user?._id?.toString() || req.ip, // Rate limit by user ID, fallback to IP
+  keyGenerator: (req) => req.user?._id?.toString() || 'unauthenticated', // Rate limit by user ID
   handler: (req, res) => {
     res.status(429).json({
       message: 'Too many withdrawal requests, please try again later',
@@ -135,7 +137,7 @@ export const adminLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new RedisStore({ prefix: 'admin:' }),
-  keyGenerator: (req) => req.ip, // Rate limit by IP address
+  // Use default IP-based key generation (handles IPv6 automatically)
 });
 
 // General limiter - Per IP (for public/unauthenticated routes)
@@ -146,5 +148,5 @@ export const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new RedisStore({ prefix: 'general:' }),
-  keyGenerator: (req) => req.ip, // Rate limit by IP address
+  // Use default IP-based key generation (handles IPv6 automatically)
 });
