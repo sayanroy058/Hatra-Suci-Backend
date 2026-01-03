@@ -138,7 +138,19 @@ const createAdminUser = async () => {
   }
 };
 
-app.listen(PORT, () => {
-  console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-  createAdminUser();
-});
+// Serverless deployment check:
+// - If SERVERLESS=true, export the app for Vercel/Lambda handlers
+// - Otherwise, start the HTTP server (for VPS/long-lived hosting)
+if (process.env.SERVERLESS === 'true') {
+  // Export for serverless (Vercel, AWS Lambda, etc.)
+  console.log('Running in serverless mode - app exported without listening');
+} else {
+  // Traditional server mode (VPS, Docker, etc.)
+  app.listen(PORT, () => {
+    console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+    createAdminUser();
+  });
+}
+
+// Export app for serverless handlers or testing
+export default app;

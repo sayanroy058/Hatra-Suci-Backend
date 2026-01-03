@@ -8,7 +8,9 @@
     "start": "node -r dotenv/config src/cluster.js",
     "start:single": "node src/server.js",
     "start:cluster": "node -r dotenv/config src/cluster.js",
-    "dev": "nodemon src/server.js"
+    "start:serverless": "SERVERLESS=true node src/server.js",
+    "dev": "nodemon src/server.js",
+    "vercel-build": "echo 'No build step required'"
   },
   "keywords": [
     "crypto",
