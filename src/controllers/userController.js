@@ -216,14 +216,16 @@ export const getReferrals = async (req, res) => {
 
     const Referral = (await import('../models/Referral.js')).default;
     
-    const [referrals, total] = await Promise.all([
+    const [referrals, total, leftCount, rightCount] = await Promise.all([
       Referral.find({ referrer: req.user._id })
         .populate('referred', 'username email createdAt')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Referral.countDocuments({ referrer: req.user._id })
+      Referral.countDocuments({ referrer: req.user._id }),
+      Referral.countDocuments({ referrer: req.user._id, side: 'left' }),
+      Referral.countDocuments({ referrer: req.user._id, side: 'right' })
     ]);
 
     // Normalize referrals: assign default 'left' side when absent (legacy data)
@@ -239,6 +241,10 @@ export const getReferrals = async (req, res) => {
         page,
         limit,
         pages: Math.ceil(total / limit)
+      },
+      teamCounts: {
+        left: leftCount,
+        right: rightCount
       }
     });
   } catch (error) {
